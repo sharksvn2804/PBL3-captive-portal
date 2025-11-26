@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Đăng nhập vào wifi</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: linear-gradient(135deg, #89f7fe, #66a6ff);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+    .login-box {
+      background: white;
+      padding: 30px;
+      border-radius: 30px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      text-align: center;
+      animation: fadeZoom 0.8s ease-out;
+    }
+    @keyframes fadeZoom {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    input {
+      margin: 10px;
+      font-size: 16px;
+      padding: 10px;
+      width: 200px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 20px;
+      background: #3b3a8a;
+      color: white;
+      font-size: 15px;
+      border: none;
+      padding: 12px 25px;
+      border-radius: 15px;
+      cursor: pointer;
+      transition: background-color 0.25s ease, transform 0.15s ease;
+    }
+    button:hover {
+      animation: fadeIn 0.6s ease-in-out;
+      color: black;
+      background: #b1e1f5;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="login-box">
+    <img src="{{ url_for('static', filename='logotruong.png') }}" alt="Logo nhóm 1" style="
+      width: 120px;
+      margin-bottom: 15px;
+      margin-right: 100px;
+    ">
+    <img src="{{ url_for('static', filename='image.png') }}" alt="Logo nhóm 1" style="
+      width: 120px;
+      margin-bottom: 15px;
+      border-radius: 10px;
+    ">
+    <h2>PBL3 - Dự án xây dựng hệ thống Captive Portal</h2>
+    <h3 style="font-weight: normal">SVTH: Trần Quang Khánh, Lê Xuân Nam, Phan Lê Minh, Đặng Quang Lâm</h3>
+    <h4 style="
+      font-weight: normal;  
+      font-size: 15px;
+      max-width: 700px;
+      margin: 20px auto;
+      line-height: 1.5;
+      text-align: center;
+      color: #333;
+    ">
+      Lưu ý: Trang này được tạo ra với mục đích phục vụ học tập môn PBL3: Mạng máy tính.
+      Tập thể nhóm 1 - JobAppJS xin cam đoan rằng mọi thông tin đăng nhập sẽ được sử dụng cho mục đích học tập và làm việc nhóm, 
+      đồng thời không thu thập hoặc lưu trữ dữ liệu cá nhân.
+    </h4>
+    <h5 style="font-weight: normal; font-size: 16px">Vui lòng đăng nhập để kết nối mạng:</h5>
+
+    <!-- Sửa form method thành POST -->
+    <form method="POST" action="/login">
+      <input type="text" name="user" placeholder="Tên người dùng" required><br>
+      <input type="password" name="pass" placeholder="Mật khẩu" required><br>
+      <button type="submit">Đăng nhập</button>
+    </form>
+  </div>
+</body>
+</html>
