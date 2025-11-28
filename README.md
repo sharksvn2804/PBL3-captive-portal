@@ -18,3 +18,6 @@ sudo tcpdump -i wlxa047d7605b5a tcp
 Bước 4: Nếu muốn phục hồi Internet như ban đầu, chạy:
 
 sudo bash stop_captive.sh
+
+
+LƯU Ý: ĐỔI TÊN TEMPLATE THÀNH TEMPLATES (Tránh lỗi)
