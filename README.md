@@ -1,7 +1,20 @@
-PBL3: Mạng máy tính
+Hướng dẫn sử dụng PBL3 – Captive Portal
 
-Hướng dẫn sử dụng:
-Bước 1: Vào đúng folder của code đã tải về
-Bước 2: Chạy code dưới quyền sudo. Cú pháp: sudo bash setup_captive.sh và để nó chạy
-Bước 3: Nếu cần, chạy cú pháp: sudo tcpdump -i wlxa047d7605b5a tcp (tùy driver hay Wifi adapter của từng thành viên mà sửa cho đúng hen)
-Bước 4: Nếu chắc ăn mà phục hồi Internet thì bấm sudo bash stop_captive.sh
+Bước 1: Mở terminal và di chuyển vào đúng thư mục chứa code đã tải về.
+(Ví dụ: cd ~/captive_portal)
+
+Bước 2: Chạy script khởi chạy Captive Portal với quyền sudo:
+
+sudo bash setup_captive.sh
+
+
+⇒ Chờ script chạy xong hoàn toàn.
+
+Bước 3: Nếu cần kiểm tra gói tin, dùng lệnh tcpdump (sửa tên interface theo adapter của mỗi người):
+
+sudo tcpdump -i wlxa047d7605b5a tcp
+
+
+Bước 4: Nếu muốn phục hồi Internet như ban đầu, chạy:
+
+sudo bash stop_captive.sh
