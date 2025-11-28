@@ -1,13 +1,15 @@
+# Khai báo các thư viện:
 from flask import Flask, request, render_template, redirect, url_for
 import json, subprocess, os, logging
 
+# Cơ sở dữ liệu đăng nhập và chương trình mình đang chạy:
 app = Flask(__name__, template_folder='templates')
 LOGIN_FILE = '/home/khanh/captive_lab/logged_in.json'
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('portal')
 
-# Load DB client
+# Load danh sách máy khách đăng nhập từ json:
 if os.path.exists(LOGIN_FILE):
     with open(LOGIN_FILE,'r') as f:
         try:
@@ -49,7 +51,7 @@ def login():
 
     if user == "khanh" and passwd == "1234":
         add_client(ip)
-        return redirect("/success")
+        return render_template('success.html')
     return render_template('fail.html')
 
 @app.route('/success')
@@ -57,7 +59,7 @@ def success():
     ip = request.remote_addr
     if not is_logged_in(ip):
         return redirect("/")
-    return render_template("success.html", redirect_url="http://google.com")
+    return render_template("success.html", redirect_url="http://idu.vn")
 
 @app.route('/<path:any>')
 def catch_all(any):
