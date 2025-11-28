@@ -20,4 +20,6 @@ Bước 4: Nếu muốn phục hồi Internet như ban đầu, chạy:
 sudo bash stop_captive.sh
 
 
-LƯU Ý: ĐỔI TÊN TEMPLATE THÀNH TEMPLATES (Tránh lỗi)
+LƯU Ý: 
+- ĐỔI TÊN TEMPLATE THÀNH TEMPLATES (Tránh lỗi)
+- Thay interface thành tên interface của USB của mọi người (chi tiết xem ip link, có gì mới thì ctrl C ctrl V tên đó vào dòng code interface ở cả các file liên quan)
