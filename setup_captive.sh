@@ -9,8 +9,8 @@ HOSTAPD_CONF="/home/khanh/captive_lab/hostapd.conf"
 DNSMASQ_CONF="/home/khanh/captive_lab/dnsmasq.conf"
 PORTAL_PY="/home/khanh/captive_lab/portal.py"
 
-# Whitelist IP trực tiếp của idu.vn
-WHITELIST_IPS=("172.67.183.53" "104.21.51.174")
+# Whitelist domain
+WHITELIST_DOMAIN="idu.vn"
 
 cleanup() {
     sudo pkill hostapd
@@ -36,38 +36,61 @@ sudo ipset create logged_in hash:ip
 sudo ipset destroy whitelist 2>/dev/null
 sudo ipset create whitelist hash:ip
 
-# Add IP trực tiếp vào whitelist
-for ip in "${WHITELIST_IPS[@]}"; do
-    sudo ipset add whitelist $ip
+# ==== AUTO-RESOLVE DOMAIN → IP WHITELIST ====
+echo "Resolving IPs for $WHITELIST_DOMAIN ..."
+IP_LIST=$(dig +short $WHITELIST_DOMAIN)
+
+for ip in $IP_LIST; do
+    if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Whitelisting IP: $ip"
+        sudo ipset add whitelist $ip
+    fi
 done
 
 # Flush iptables
 sudo iptables -F
 sudo iptables -t nat -F
 
-# ==== NAT INTERNET cho client đã login ====
+# NAT internet
 sudo iptables -t nat -A POSTROUTING -s $SUBNET -o $INET_IF -j MASQUERADE
+
+# Allow established
 sudo iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# ==== CHO PHÉP chỉ ra whitelist site khi đã login ====
-sudo iptables -A FORWARD -i $WL_IF -m set --match-set logged_in src \
-    -m set --match-set whitelist dst -j ACCEPT
+# ===== CLIENT ĐÃ LOGIN =====
+# Allow whitelist IPs
+sudo iptables -A FORWARD -i $WL_IF \
+     -m set --match-set logged_in src \
+     -m set --match-set whitelist dst \
+     -j ACCEPT
 
-# ==== BLOCK tất cả site khác của client đã login ====
-sudo iptables -A FORWARD -i $WL_IF -m set --match-set logged_in src \
-    -j REJECT --reject-with icmp-host-prohibited
+# Allow whitelist DOMAIN via HTTP (Host header)
+sudo iptables -A FORWARD -i $WL_IF -p tcp --dport 80 \
+     -m set --match-set logged_in src \
+     -m string --string "$WHITELIST_DOMAIN" --algo bm \
+     -j ACCEPT
 
-# ==== Chặn HTTPS cho client chưa login ====
+# Chặn ngay tất cả trang khác (TCP/UDP)
+sudo iptables -A FORWARD -i $WL_IF \
+     -m set --match-set logged_in src \
+     -p tcp -j REJECT --reject-with tcp-reset
+
+sudo iptables -A FORWARD -i $WL_IF \
+     -m set --match-set logged_in src \
+     -p udp -j REJECT --reject-with icmp-port-unreachable
+
+# ===== CLIENT CHƯA LOGIN =====
+# Block HTTPS immediately
 sudo iptables -A FORWARD -i $WL_IF -p tcp --dport 443 \
-    -m set ! --match-set logged_in src \
-    -j REJECT --reject-with tcp-reset
+     -m set ! --match-set logged_in src \
+     -j REJECT --reject-with tcp-reset
 
-# ==== Redirect HTTP → PORTAL khi chưa login ====
+# Redirect HTTP → portal
 sudo iptables -t nat -A PREROUTING -i $WL_IF -p tcp --dport 80 \
-    -m set ! --match-set logged_in src \
-    -j REDIRECT --to-port $PORTAL_PORT
+     -m set ! --match-set logged_in src \
+     -j REDIRECT --to-port $PORTAL_PORT
 
-# Mở port portal và DNS
+# Open portal + DNS
 sudo iptables -A INPUT -i $WL_IF -p tcp --dport $PORTAL_PORT -j ACCEPT
 sudo iptables -A INPUT -i $WL_IF -p udp --dport 53 -j ACCEPT
 
@@ -78,5 +101,7 @@ sudo dnsmasq --conf-file=$DNSMASQ_CONF > dnsmasq.log 2>&1 &
 sleep 1
 sudo python3 $PORTAL_PY > portal.log 2>&1 &
 
-echo "Captive Portal Running! Only idu.vn allowed after login."
+echo "Captive Portal Running!"
+echo "Whitelisted domain: $WHITELIST_DOMAIN"
+echo "Whitelisted IPs: $IP_LIST"
 wait
