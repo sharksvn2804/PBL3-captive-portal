@@ -15,7 +15,7 @@ Bước 3: Nếu cần kiểm tra gói tin, dùng lệnh tcpdump (sửa tên int
 sudo tcpdump -i wlxa047d7605b5a tcp
 
 
-Bước 4: Nếu muốn phục hồi Internet như ban đầu, chạy:
+Bước 4: Nếu muốn phục hồi Internet cho máy mình đã chạy như ban đầu, chạy:
 
 sudo bash stop_captive.sh
 
