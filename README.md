@@ -1,4 +1,4 @@
-Hướng dẫn sử dụng PBL3 – Captive Portal
+Hướng dẫn sử dụng PBL3 – Captive Portal (dành cho các thành viên trong nhóm)
 
 Bước 1: Mở terminal và di chuyển vào đúng thư mục chứa code đã tải về.
 (Ví dụ: cd ~/captive_portal)
