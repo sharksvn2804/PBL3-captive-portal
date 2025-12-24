@@ -43,4 +43,4 @@ echo "Resetting login database..."
 sudo rm -f $LOGIN_FILE
 echo '{}' | sudo tee $LOGIN_FILE > /dev/null
 
-echo "✅ Captive portal stopped and environment restored."
+echo "Captive portal stopped and environment restored."
