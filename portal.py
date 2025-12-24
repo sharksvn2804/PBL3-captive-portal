@@ -139,9 +139,7 @@ def cleanup_expired_sessions():
 cleanup_thread = threading.Thread(target=cleanup_expired_sessions, daemon=True)
 cleanup_thread.start()
 
-# ========== ROUTES ==========
-
-# Optimize: No caching on portal
+# Routes:
 @app.after_request
 def no_cache(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -188,7 +186,7 @@ def catch_all(any):
         return redirect("/")
     return f"OK: {any}"
 
-# ========== MAIN ==========
+# Main:
 if __name__ == "__main__":
     logger.info("Starting Captive Portal Server...")
     try:
