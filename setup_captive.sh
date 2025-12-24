@@ -98,11 +98,8 @@ sudo iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 # ========== ADMIN FULL INTERNET ACCESS (PRIORITY 1) ==========
 echo "=== Granting admin full internet access (MAC: $ADMIN_MAC) ==="
 
-# Admin: Allow traffic FROM WiFi TO Internet
-sudo iptables -I FORWARD 1 -i $WL_IF -o $INET_IF -m mac --mac-source $ADMIN_MAC -j ACCEPT
-
-# Admin: Allow traffic FROM Internet TO WiFi (reply packets)
-sudo iptables -I FORWARD 2 -i $INET_IF -o $WL_IF -m mac --mac-destination $ADMIN_MAC -j ACCEPT
+# Allow tất cả traffic (vào + ra)
+sudo iptables -I FORWARD 1 -m mac --mac-source $ADMIN_MAC -j ACCEPT
 
 # Admin: Bypass NAT redirect & HTTP redirect
 sudo iptables -t nat -I PREROUTING 1 -m mac --mac-source $ADMIN_MAC -j RETURN
