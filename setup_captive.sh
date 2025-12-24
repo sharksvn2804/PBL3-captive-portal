@@ -5,20 +5,19 @@ AP_IP="192.168.4.1"
 INET_IF="wlp0s20f3"
 PORTAL_PORT=8080
 SUBNET="192.168.4.0/24"
-HOSTAPD_CONF="/home/khanh/captive_lab/hostapd.conf"
-DNSMASQ_CONF="/home/khanh/captive_lab/dnsmasq.conf"
-PORTAL_PY="/home/khanh/captive_lab/portal.py"
+HOSTAPD_CONF="/home/khanh/PBL3_duphong/hostapd.conf"
+DNSMASQ_CONF="/home/khanh/PBL3_duphong/dnsmasq.conf"
+PORTAL_PY="/home/khanh/PBL3_duphong/portal.py"
 
-# MAC của điện thoại admin
 ADMIN_MAC="e0:dc:ff:d3:18:63"
-
-# Domain cho sinh viên được truy cập
 WHITELIST_DOMAIN="idu.vn"
+FALLBACK_IPS="104.21.51.174 172.67.183.53"
 
 cleanup() {
     sudo pkill hostapd
     sudo pkill dnsmasq
     sudo pkill -f portal.py
+    sudo pkill -f "dynamic_update_whitelist"
     sudo iptables -F
     sudo iptables -t nat -F
     sudo ipset destroy logged_in 2>/dev/null
@@ -26,94 +25,175 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-# Setup AP
+# ========== RESET DATABASE ==========
+echo "=== Resetting login database ==="
+sudo rm -f /home/khanh/PBL3_duphong/logged_in.json
+sudo bash -c 'echo "{}" > /home/khanh/PBL3_duphong/logged_in.json'
+echo "Database cleared"
+
+# ========== SETUP ACCESS POINT ==========
+echo "=== Setting up Access Point ==="
 sudo ip link set $WL_IF down
 sudo ip addr flush dev $WL_IF
 sudo ip addr add $AP_IP/24 dev $WL_IF
 sudo ip link set $WL_IF up
 sudo sysctl -w net.ipv4.ip_forward=1
 
-# Setup ipsets
+# ========== SETUP IPSETS ==========
+echo "=== Creating IP sets ==="
 sudo ipset destroy logged_in 2>/dev/null
 sudo ipset create logged_in hash:ip
 sudo ipset destroy whitelist 2>/dev/null
 sudo ipset create whitelist hash:ip
 
-# Resolve idu.vn → IP whitelist
-echo "Resolving IPs for $WHITELIST_DOMAIN ..."
-IP_LIST=$(dig +short $WHITELIST_DOMAIN)
+# ========== RESOLVE WHITELIST DOMAIN ==========
+echo "=== Resolving whitelist domain ==="
 
+resolve_domain() {
+    local domain=$1
+    local retry_count=0
+    local max_retries=3
+    local ip_list=""
+    
+    while [ -z "$ip_list" ] && [ $retry_count -lt $max_retries ]; do
+        echo "Resolving IPs for $domain ... (attempt $((retry_count + 1))/$max_retries)"
+        ip_list=$(dig +short $domain 2>/dev/null)
+        
+        if [ -z "$ip_list" ]; then
+            if [ $retry_count -lt $((max_retries - 1)) ]; then
+                echo "DNS resolution failed, retrying in 2 seconds..."
+                sleep 2
+            fi
+            retry_count=$((retry_count + 1))
+        fi
+    done
+    
+    if [ -z "$ip_list" ]; then
+        echo "DNS resolution failed, using fallback IPs"
+        ip_list=$FALLBACK_IPS
+    fi
+    
+    echo "$ip_list"
+}
+
+IP_LIST=$(resolve_domain "$WHITELIST_DOMAIN")
+
+echo "=== Adding IPs to whitelist ==="
 for ip in $IP_LIST; do
     if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "Whitelisting IP: $ip"
-        sudo ipset add whitelist $ip
+        sudo ipset add whitelist $ip 2>/dev/null
     fi
 done
 
-# Flush iptables
+# ========== FLUSH IPTABLES ==========
+echo "=== Flushing iptables ==="
 sudo iptables -F
 sudo iptables -t nat -F
 
-# -------------- WHITELIST ADMIN BY MAC --------------
-echo "Whitelisting admin MAC: $ADMIN_MAC"
-
-# Admin BYPASS everything (Internet full)
-sudo iptables -A FORWARD -m mac --mac-source $ADMIN_MAC -j ACCEPT
-sudo iptables -t nat -A PREROUTING -m mac --mac-source $ADMIN_MAC -j RETURN
-# ----------------------------------------------------
-
-# NAT Internet
+# ========== NAT & ESTABLISHED CONNECTIONS ==========
 sudo iptables -t nat -A POSTROUTING -s $SUBNET -o $INET_IF -j MASQUERADE
-
-# Allow established connections
 sudo iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# ========== CLIENT ĐÃ LOGIN ==========
-# Allow DNS/IPs của idu.vn
+# ========== ADMIN FULL INTERNET ACCESS (PRIORITY 1) ==========
+echo "=== Granting admin full internet access (MAC: $ADMIN_MAC) ==="
+
+# Admin: Allow traffic FROM WiFi TO Internet
+sudo iptables -I FORWARD 1 -i $WL_IF -o $INET_IF -m mac --mac-source $ADMIN_MAC -j ACCEPT
+
+# Admin: Allow traffic FROM Internet TO WiFi (reply packets)
+sudo iptables -I FORWARD 2 -i $INET_IF -o $WL_IF -m mac --mac-destination $ADMIN_MAC -j ACCEPT
+
+# Admin: Bypass NAT redirect & HTTP redirect
+sudo iptables -t nat -I PREROUTING 1 -m mac --mac-source $ADMIN_MAC -j RETURN
+
+# ========== CLIENT CHƯA LOGIN - CHẶN NHANH ==========
+echo "=== Setting up FAST BLOCK for NOT LOGGED IN ==="
+
+# Redirect HTTP (port 80) về portal (cho user chưa login)
+sudo iptables -t nat -A PREROUTING -i $WL_IF -p tcp --dport 80 \
+    -m set ! --match-set logged_in src \
+    -j REDIRECT --to-port $PORTAL_PORT
+
+# Allow DNS (port 53) cho chưa login
+sudo iptables -A FORWARD -i $WL_IF -p udp --dport 53 \
+    -m set ! --match-set logged_in src \
+    -j ACCEPT
+
+# Chặn TẤT CẢ traffic khác từ chưa login
+sudo iptables -A FORWARD -i $WL_IF \
+    -m set ! --match-set logged_in src \
+    -j REJECT --reject-with icmp-host-unreachable
+
+# ========== CLIENT ĐÃ LOGIN - ALLOW IDU.VN ONLY ==========
+echo "=== Setting up ALLOW for LOGGED IN users (idu.vn only) ==="
+
+# Cho phép DNS
+sudo iptables -A FORWARD -i $WL_IF -p udp --dport 53 \
+    -m set --match-set logged_in src \
+    -j ACCEPT
+
+# Cho phép whitelist IPs (idu.vn)
 sudo iptables -A FORWARD -i $WL_IF \
     -m set --match-set logged_in src \
     -m set --match-set whitelist dst \
     -j ACCEPT
 
-# Allow HTTP có Host header chứa "idu.vn"
+# Cho phép HTTP có Host header (backup CDN)
 sudo iptables -A FORWARD -i $WL_IF -p tcp --dport 80 \
-     -m set --match-set logged_in src \
-     -m string --string "$WHITELIST_DOMAIN" --algo bm \
-     -j ACCEPT
+    -m set --match-set logged_in src \
+    -m string --string "Host: $WHITELIST_DOMAIN" --algo bm \
+    -j ACCEPT
 
-# Block mọi trang khác
+# CHẶN TẤT CẢ TRAFFIC KHÁC của logged_in
 sudo iptables -A FORWARD -i $WL_IF \
-     -m set --match-set logged_in src \
-     -p tcp -j REJECT --reject-with tcp-reset
+    -m set --match-set logged_in src \
+    -j REJECT --reject-with icmp-host-unreachable
 
-sudo iptables -A FORWARD -i $WL_IF \
-     -m set --match-set logged_in src \
-     -p udp -j REJECT --reject-with icmp-port-unreachable
-
-# ========== CLIENT CHƯA LOGIN ==========
-# Block HTTPS
-sudo iptables -A FORWARD -i $WL_IF -p tcp --dport 443 \
-     -m set ! --match-set logged_in src \
-     -j REJECT --reject-with tcp-reset
-
-# Redirect HTTP về portal
-sudo iptables -t nat -A PREROUTING -i $WL_IF -p tcp --dport 80 \
-     -m set ! --match-set logged_in src \
-     -j REDIRECT --to-port $PORTAL_PORT
-
-# Portal + DNS
+# ========== INPUT RULES ==========
 sudo iptables -A INPUT -i $WL_IF -p tcp --dport $PORTAL_PORT -j ACCEPT
 sudo iptables -A INPUT -i $WL_IF -p udp --dport 53 -j ACCEPT
 
-# Start services
+# ========== START SERVICES ==========
+echo "=== Starting services ==="
 sudo hostapd $HOSTAPD_CONF > hostapd.log 2>&1 &
-sleep 1
-sudo dnsmasq --conf-file=$DNSMASQ_CONF > dnsmasq.log 2>&1 &
-sleep 1
-sudo python3 $PORTAL_PY > portal.log 2>&1 &
+sleep 2
 
-echo "Captive Portal Running!"
-echo "Admin MAC bypass: $ADMIN_MAC"
-echo "Whitelisted domain: $WHITELIST_DOMAIN"
-echo "Whitelisted IPs: $IP_LIST"
+sudo dnsmasq --conf-file=$DNSMASQ_CONF > dnsmasq.log 2>&1 &
+sleep 2
+
+sudo python3 $PORTAL_PY > portal.log 2>&1 &
+sleep 1
+
+# ========== DYNAMIC WHITELIST UPDATE ==========
+dynamic_update_whitelist() {
+    while true; do
+        sleep 300
+        NEW_IPS=$(dig +short $WHITELIST_DOMAIN 2>/dev/null)
+        
+        if [ -n "$NEW_IPS" ]; then
+            for ip in $NEW_IPS; do
+                if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    if ! sudo ipset test whitelist $ip 2>/dev/null; then
+                        sudo ipset add whitelist $ip 2>/dev/null
+                    fi
+                fi
+            done
+        fi
+    done
+}
+
+dynamic_update_whitelist > whitelist_update.log 2>&1 &
+
+echo ""
+echo "========================================="
+echo "✓ Captive Portal Running!"
+echo "========================================="
+echo "Admin MAC: $ADMIN_MAC"
+echo "  → FULL INTERNET ACCESS (no login)"
+echo "Other users:"
+echo "  → Must login to access idu.vn"
+echo "========================================="
+echo ""
+
 wait
